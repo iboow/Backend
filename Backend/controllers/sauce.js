@@ -4,28 +4,34 @@ const { updateOne } = require("../models/sauce.model");
 
 exports.createSauce = (req, res, next) => {
   const sauceObject = JSON.parse(req.body.sauce);
+  console.log(sauceObject);
   const defaultValue = {
     likes: 0,
     dislikes: 0,
     usersLiked: [],
     usersDisliked: [],
   };
-  const sauce = new Sauce({
-    ...sauceObject,
-    imageUrl: `${req.protocol}://${req.get("host")}/images/${
-      req.file.filename
-    }`,
-    ...defaultValue,
-  });
 
-  sauce
-    .save()
-    .then(() => {
-      res.status(201).json({ message: "Sauce enregistré !" });
-    })
-    .catch((error) => {
-      res.status(400).json({ error });
+  if (sauceObject.userId !== req.auth.userId) {
+    return res.status(403).json("unauthorized request");
+  } else {
+    const sauce = new Sauce({
+      ...sauceObject,
+      imageUrl: `${req.protocol}://${req.get("host")}/images/${
+        req.file.filename
+      }`,
+      ...defaultValue,
     });
+
+    sauce
+      .save()
+      .then(() => {
+        res.status(201).json({ message: "Sauce enregistré !" });
+      })
+      .catch((error) => {
+        res.status(400).json({ error });
+      });
+  }
 };
 
 exports.getAllSauce = (req, res, next) => {
@@ -48,19 +54,26 @@ exports.getOneSauce = (req, res, next) => {
 
 exports.modifySauce = (req, res, next) => {
   console.log(req.file);
-  if (req.file) {
-    Sauce.findOne({ _id: req.params.id })
-      .then((sauce) => {
+
+  Sauce.findOne({ _id: req.params.id })
+  .then((sauce) => {
+    if (sauce.userId != req.auth.userId) {
+      res.status(401).json({ message: "Not authorized" });
+    } else {
+
+    if (req.file) {
         const filename = sauce.imageUrl.split("/images/")[1];
         fs.unlink(`images/${filename}`, (error) => {
           if (error) throw error;
         });
-      })
+      }
+      }
+    })
       .catch((error) => res.status(404).json({ error }));
-  }
+  
 
   const userObject = req.file
-    ? {
+    ? { 
         ...JSON.parse(req.body.sauce),
         imageUrl: `${req.protocol}://${req.get("host")}/images/${
           req.file.filename
@@ -97,13 +110,10 @@ exports.deleteSauce = (req, res, next) => {
 };
 
 exports.likeSauce = (req, res, next) => {
-
-  
   // vérifier si l'utilisateur n'a pas déjà donner un avis
   Sauce.findOne({ _id: req.params.id })
     .then((sauce) => {
       if (!sauce.usersLiked.includes(req.body.userId) && req.body.like === 1) {
-       
         // MAJ de la base de donnée
 
         Sauce.updateOne(
@@ -117,9 +127,11 @@ exports.likeSauce = (req, res, next) => {
             res.status(201).json({ message: " Vous avez aimez !" });
           })
           .catch((error) => res.status(400).json({ error }));
-
-      }  if (!sauce.usersDisliked.includes(req.body.userId) && req.body.like === -1 ){
-
+      }
+      if (
+        !sauce.usersDisliked.includes(req.body.userId) &&
+        req.body.like === -1
+      ) {
         Sauce.updateOne(
           { _id: req.params.id },
           {
@@ -131,38 +143,39 @@ exports.likeSauce = (req, res, next) => {
             res.status(201).json({ message: " Vous n'avez pas aimez !" });
           })
           .catch((error) => res.status(400).json({ error }));
-
-      }  if(sauce.usersDisliked.includes(req.body.userId) && req.body.like === 0){
-
+      }
+      if (
+        sauce.usersDisliked.includes(req.body.userId) &&
+        req.body.like === 0
+      ) {
         Sauce.updateOne(
-
           { _id: req.params.id },
           {
             $inc: { dislikes: -1 },
-            $pull:{usersDisliked: req.body.userId}
+            $pull: { usersDisliked: req.body.userId },
           }
         )
-        .then(() => {
-          res.status(201).json({ message: " Vous avez retirer votre dislike !" });
-        })
-        .catch((error) => res.status(400).json({ error }));
-
-      } if(sauce.usersLiked.includes(req.body.userId) && req.body.like === 0) {
-
+          .then(() => {
+            res
+              .status(201)
+              .json({ message: " Vous avez retirer votre dislike !" });
+          })
+          .catch((error) => res.status(400).json({ error }));
+      }
+      if (sauce.usersLiked.includes(req.body.userId) && req.body.like === 0) {
         Sauce.updateOne(
-
           { _id: req.params.id },
           {
             $inc: { likes: -1 },
-            $pull:{usersLiked: req.body.userId}
+            $pull: { usersLiked: req.body.userId },
           }
         )
-        .then(() => {
-          res.status(201).json({ message: " Vous avez retirer votre like !" });
-        })
-        .catch((error) => res.status(400).json({ error }));
-
-
+          .then(() => {
+            res
+              .status(201)
+              .json({ message: " Vous avez retirer votre like !" });
+          })
+          .catch((error) => res.status(400).json({ error }));
       }
     })
     .catch((error) => res.status(404).json({ error }));
